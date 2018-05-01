@@ -7,9 +7,11 @@ import os
 import numpy as np
 
 def get_mnist():
+   
    (train_x, train_y), (test_x, test_y) = mnist.load_data()
    train_x = np.stack([train_x]*3, axis=3)
    test_x = np.stack([test_x]*3, axis=3)
+   
    return (train_x, train_y), (test_x, test_y) 
 
 def get_svhn():
@@ -31,11 +33,12 @@ def get_svhn():
     train = sio.loadmat(os.path.join('datasets', 'svhn_train.mat'))
     test = sio.loadmat(os.path.join('datasets', 'svhn_test.mat'))
     
-    
-    print (np.transpose(train['X'], (3,0,1,2)).shape, train['y'].shape, np.transpose(test['X'], (3,0,1,2)).shape, test['y'].shape) 
-    
-get_svhn()
-get_mnist()
-(train_x, train_y), (test_x, test_y) = get_mnist()
+    return (np.transpose(train['X'], (3,0,1,2)), train['y'].flatten()), (np.transpose(test['X'], (3,0,1,2)), test['y'].flatten()) 
 
-print (train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+if __name__=='__main__':
+
+    (train_x, train_y), (test_x, test_y) = get_svhn()
+    print (train_x.shape, train_y.shape, test_x.shape, test_y)
+
+    (train_x, train_y), (test_x, test_y) = get_mnist()
+    print (train_x.shape, train_y.shape, test_x.shape, test_y)
