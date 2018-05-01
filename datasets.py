@@ -1,14 +1,20 @@
 from keras.datasets import mnist
-
 import scipy.io as sio
 import urllib.request
 import shutil
 import os
 import numpy as np
+import keras
+from keras.preprocessing.image import ImageDataGenerator
+from keras.utils import np_utils
+
+NUM_CLASSES = 10
 
 def get_mnist():
    
    (train_x, train_y), (test_x, test_y) = mnist.load_data()
+   train_x = np.pad(train_x,((0,0), (2,2), (2,2)),'constant')
+   test_x = np.pad(test_x,((0,0), (2,2), (2,2)),'constant')
    train_x = np.stack([train_x]*3, axis=3)
    test_x = np.stack([test_x]*3, axis=3)
    
@@ -18,7 +24,6 @@ def get_svhn():
     
     if not os.path.isdir('datasets'):
         os.mkdir('datasets')
-    
     
     if not os.path.exists(os.path.join('datasets', 'svhn_train.mat')):
         print ('Downloading SVHN training set!')
@@ -33,12 +38,40 @@ def get_svhn():
     train = sio.loadmat(os.path.join('datasets', 'svhn_train.mat'))
     test = sio.loadmat(os.path.join('datasets', 'svhn_test.mat'))
     
-    return (np.transpose(train['X'], (3,0,1,2)), train['y'].flatten()), (np.transpose(test['X'], (3,0,1,2)), test['y'].flatten()) 
+    train_y = train['y'].flatten()
+    test_y = test['y'].flatten()
+    train_y[train_y==10]=0
+    test_y[test_y==10]=0
+    
+    return (np.transpose(train['X'], (3,0,1,2)), train_y), (np.transpose(test['X'], (3,0,1,2)), test_y) 
+
+def get_dataset(dataset='mnist'):
+    
+    if dataset=='mnist':
+        (train_x, train_y), (test_x, test_y) = get_mnist()
+    elif dataset=='svhn':
+        (train_x, train_y), (test_x, test_y) = get_svhn()
+    
+    train_y = np_utils.to_categorical(train_y, NUM_CLASSES)
+    test_y = np_utils.to_categorical(test_y, NUM_CLASSES)
+    
+    return (train_x, train_y), (test_x, test_y)
 
 if __name__=='__main__':
 
-    (train_x, train_y), (test_x, test_y) = get_svhn()
-    print (train_x.shape, train_y.shape, test_x.shape, test_y)
+    (train_x, train_y), (test_x, test_y) = get_dataset('svhn')
+    print (train_x.shape, train_y.shape, test_x.shape, test_y.shape)
 
-    (train_x, train_y), (test_x, test_y) = get_mnist()
-    print (train_x.shape, train_y.shape, test_x.shape, test_y)
+    (train_x, train_y), (test_x, test_y) = get_dataset('mnist')
+    print (train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+    
+    '''
+    datagen = ImageDataGenerator(featurewise_center=True, 
+                                featurewise_std_normalization=True, 
+                                data_format='channels_last', 
+                                rescale=1./255, 
+                                rotation_range=40, 
+                                width_shift_range=0.2, 
+                                height_shift_range=0.2)
+    datagen.fit(train_x)
+    '''
