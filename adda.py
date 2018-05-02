@@ -252,17 +252,17 @@ class ADDA():
                         
         model.compile(loss='categorical_crossentropy', optimizer=self.src_optimizer, metrics=['accuracy'])
 
-        scores = model.evaluate_generator(src_datagen.flow(test_x, test_y, batch_size = batch_size),test_x.shape[0])
+        scores = model.evaluate_generator(src_datagen.flow(test_x[:10000], test_y[:10000]),10000)
         print('%s %s Classifier Test loss:%.5f'%(dataset.upper(), domain, scores[0]))
         print('%s %s Classifier Test accuracy:%.2f%%'%(dataset.upper(), domain, float(scores[1])*100))            
             
-    def eval_target_classifier(self, source_model, target_discriminator, batch_size=128, dataset='svhn'):
+    def eval_target_classifier(self, source_model, target_discriminator, dataset='svhn'):
         
         enc = self.define_target_encoder()
         model = self.get_source_classifier(enc, source_model)
         model.load_weights(target_discriminator, by_name=True)
         model.summary()
-        self.eval_source_classifier(model, dataset='svhn', domain='Target')
+        self.eval_source_classifier(model, dataset=dataset, domain='Target')
          
 if __name__ == '__main__':
 
