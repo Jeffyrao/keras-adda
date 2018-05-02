@@ -3,6 +3,7 @@ This is an implementation of Adversarial Discriminative Domain Adaptation [https
 
 The class implementing ADDA is in `adda.py`. 
 
+```
 usage: adda.py [-h] [-s SOURCE_WEIGHTS] [-e START_EPOCH]
                [-n DISCRIMINATOR_EPOCHS] [-f]
                [-a SOURCE_DISCRIMINATOR_WEIGHTS]
@@ -29,7 +30,7 @@ optional arguments:
                         Path to source classifier model to test/evaluate
   -d EVAL_TARGET_CLASSIFIER, --eval_target_classifier EVAL_TARGET_CLASSIFIER
                         Path to target discriminator model to test/evaluate
-
+```
 
 ### Run Source Classifier on MNIST
 
