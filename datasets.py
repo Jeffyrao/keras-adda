@@ -15,10 +15,8 @@ def get_mnist():
    (train_x, train_y), (test_x, test_y) = mnist.load_data()
    train_x = np.pad(train_x,((0,0), (2,2), (2,2)),'constant')
    test_x = np.pad(test_x,((0,0), (2,2), (2,2)),'constant')
-   train_x = np.stack([train_x]*3, axis=3)
-   test_x = np.stack([test_x]*3, axis=3)
    
-   return (train_x, train_y), (test_x, test_y) 
+   return (train_x.reshape(train_x.shape+(1,)), train_y), (test_x.reshape(test_x.shape+(1,)), test_y) 
 
 def get_svhn():
     
@@ -43,7 +41,19 @@ def get_svhn():
     train_y[train_y==10]=0
     test_y[test_y==10]=0
     
-    return (np.transpose(train['X'], (3,0,1,2)), train_y), (np.transpose(test['X'], (3,0,1,2)), test_y) 
+    train_x = np.transpose(train['X'], (3,0,1,2))
+    test_x = np.transpose(test['X'], (3,0,1,2)) 
+    
+    Tx = np.zeros(train_x.shape[:-1])
+    tx = np.zeros(test_x.shape[:-1])
+    
+    # Convert to grayscale
+    Tx = 0.3*train_x[:,:,:,0] + 0.59*train_x[:,:,:,1] + 0.11*train_x[:,:,:,2]
+    tx = 0.3*test_x[:,:,:,0] + 0.59*test_x[:,:,:,1] + 0.11*test_x[:,:,:,2]
+    
+    Tx = np.reshape(Tx, Tx.shape+(1,))
+    tx = np.reshape(tx, tx.shape+(1,))
+    return (Tx, train_y), (tx, test_y) 
 
 def get_dataset(dataset='mnist'):
     
@@ -65,13 +75,3 @@ if __name__=='__main__':
     (train_x, train_y), (test_x, test_y) = get_dataset('mnist')
     print (train_x.shape, train_y.shape, test_x.shape, test_y.shape)
     
-    '''
-    datagen = ImageDataGenerator(featurewise_center=True, 
-                                featurewise_std_normalization=True, 
-                                data_format='channels_last', 
-                                rescale=1./255, 
-                                rotation_range=40, 
-                                width_shift_range=0.2, 
-                                height_shift_range=0.2)
-    datagen.fit(train_x)
-    '''
