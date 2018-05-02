@@ -88,7 +88,7 @@ class ADDA():
         x = Flatten()(inp)
         x = Dense(128, activation=LeakyReLU(alpha=0.3), kernel_regularizer=regularizers.l2(0.01), name='discriminator1')(x)
         
-        x = Dense(2, activation=None, name='discriminator2')(x)
+        x = Dense(2, activation='sigmoid', name='discriminator2')(x)
         
         self.disc_flag = True
         self.discriminator_model = Model(inputs=(inp), outputs=(x), name='discriminator')
@@ -241,9 +241,9 @@ class ADDA():
             self.tensorboard_log(callback1, src_names, [avg_loss[0]/mnist.shape[0], avg_acc[0]/mnist.shape[0]], iteration)
             self.tensorboard_log(callback2, tgt_names, [avg_loss[1]/mnist.shape[0], avg_acc[1]/mnist.shape[0]], iteration)
     
-    def eval_source_classifier(self, model, batch_size=128):
+    def eval_source_classifier(self, model, dataset='mnist', batch_size=128, domain='Source'):
         
-        (train_x,_), (test_x, test_y) = get_dataset('mnist')
+        (train_x,_), (test_x, test_y) = get_dataset(dataset)
         src_datagen = ImageDataGenerator(featurewise_center=True, 
                                 featurewise_std_normalization=True, 
                                 data_format='channels_last', 
@@ -252,23 +252,29 @@ class ADDA():
                         
         model.compile(loss='categorical_crossentropy', optimizer=self.src_optimizer, metrics=['accuracy'])
 
-        scores = model.evaluate_generator(src_datagen.flow(test_x, test_y, batch_size = batch_size),10000)
-        print('MNIST Source Classifier Test loss:%.5f'%scores[0])
-        print('MNIST Source Classifier Test accuracy:%.2f%%'%(float(scores[1])*100))            
+        scores = model.evaluate_generator(src_datagen.flow(test_x, test_y, batch_size = batch_size),test_x.shape[0])
+        print('%s %s Classifier Test loss:%.5f'%(dataset.upper(), domain, scores[0]))
+        print('%s %s Classifier Test accuracy:%.2f%%'%(dataset.upper(), domain, float(scores[1])*100))            
             
-        #def eval_target_classifier(self, source_model, target_discriminator, batch_size=128):
-     
-            
+    def eval_target_classifier(self, source_model, target_discriminator, batch_size=128, dataset='svhn'):
+        
+        enc = self.define_target_encoder()
+        model = self.get_source_classifier(enc, source_model)
+        model.load_weights(target_discriminator, by_name=True)
+        model.summary()
+        self.eval_source_classifier(model, dataset='svhn', domain='Target')
+         
 if __name__ == '__main__':
 
     ap = argparse.ArgumentParser()
-    ap.add_argument('-s', '--source_weights', required=False, help="Path to weights file to load source model")
+    ap.add_argument('-s', '--source_weights', required=False, help="Path to weights file to load source model for training classification/adaptation")
     ap.add_argument('-e', '--start_epoch', type=int,default=1, required=False, help="Epoch to begin training source model from")
     ap.add_argument('-n', '--discriminator_epochs', type=int, default=10000, help="Max number of steps to train discriminator")
     ap.add_argument('-f', '--train_discriminator', action='store_true', help="Train discriminator model (if TRUE) vs Train source classifier")
     ap.add_argument('-a', '--source_discriminator_weights', help="Path to weights file to load source discriminator")
     ap.add_argument('-b', '--target_discriminator_weights', help="Path to weights file to load target discriminator")
     ap.add_argument('-t', '--eval_source_classifier', default=None, help="Path to source classifier model to test/evaluate")
+    ap.add_argument('-d', '--eval_target_classifier', default=None, help="Path to target discriminator model to test/evaluate")
     args = ap.parse_args()
     
     adda = ADDA()
@@ -280,11 +286,15 @@ if __name__ == '__main__':
             adda.train_source_model(model, start_epoch=args.start_epoch-1) 
         else:
             model = adda.get_source_classifier(adda.source_encoder, args.eval_source_classifier)
-            adda.eval_source_classifier(model)
+            #adda.eval_source_classifier(model, 'mnist')
+            #adda.eval_source_classifier(model, 'svhn')
     adda.define_target_encoder(args.source_weights)
     
-    if args.train_discriminator:
+    if args.train_discriminator and args.eval_target_classifier is None:
         adda.train_target_discriminator(epochs=args.discriminator_epochs, 
                                         source_model=args.source_weights, 
                                         src_discriminator=args.source_discriminator_weights, 
                                         tgt_discriminator=args.target_discriminator_weights)
+    else:
+        adda.eval_target_classifier(args.eval_source_classifier, args.eval_target_classifier)
+    
