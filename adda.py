@@ -24,34 +24,41 @@ import numpy as np
 import argparse
 
 class ADDA():
-    def __init__(self):
+    def __init__(self, lr):
         # Input shape
         self.img_rows = 32
         self.img_cols = 32
-        self.channels = 1
+        self.channels = 3
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         self.src_flag = False
         self.disc_flag = False
         
-        self.discriminator_decay_rate = 1000 #iterations
-        self.discriminator_decay_factor = 0.8
-        self.src_optimizer = Adam(0.0001, 0.5)
-        self.tgt_optimizer = Adam(0.0002, 0.5)
+        self.discriminator_decay_rate = 3 #iterations
+        self.discriminator_decay_factor = 0.5
+        self.src_optimizer = Adam(lr, 0.5)
+        self.tgt_optimizer = Adam(lr, 0.5)
         
     def define_source_encoder(self, weights=None):
     
-        self.source_encoder = Sequential()
+        #self.source_encoder = keras.applications.vgg16.VGG16(include_top=False, weights='imagenet', input_shape=self.img_shape, pooling=None, classes=10)
         
+        self.source_encoder = Sequential()
         inp = Input(shape=self.img_shape)
         x = Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=self.img_shape, padding='same')(inp)
+        x = Conv2D(64, kernel_size=(3, 3), activation='relu', padding='same')(x)
         x = MaxPooling2D(pool_size=(2, 2))(x)
-        x = Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(256, kernel_size=(3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(128, kernel_size=(3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(64, kernel_size=(3, 3), activation='relu', padding='same')(x)
         x = MaxPooling2D(pool_size=(2, 2))(x)
+        x = Conv2D(128, kernel_size=(3, 3), activation='relu', input_shape=self.img_shape, padding='same')(inp)
+        x = Conv2D(64, kernel_size=(3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same')(x)
+        x = MaxPooling2D(pool_size=(2, 2))(x)
+        self.source_encoder = Model(inputs=(inp), outputs=(x))
         
         self.src_flag = True
-        
-        self.source_encoder = Model(inputs=(inp), outputs=(x))
         
         if weights is not None:
             self.source_encoder.load_weights(weights, by_name=True)
@@ -67,8 +74,6 @@ class ADDA():
         if weights is not None:
             self.target_encoder.load_weights(weights, by_name=True)
         
-        return self.target_encoder
-    
     def get_source_classifier(self, model, weights=None):
         
         x = Flatten()(model.output)
@@ -117,29 +122,23 @@ class ADDA():
       
     def train_source_model(self, model, epochs=2000, batch_size=128, save_interval=1, start_epoch=0):
 
-        (train_x, train_y), (test_x, test_y) = get_dataset('mnist')
+        (train_x, train_y), (test_x, test_y) = get_dataset('svhn')
         
-        datagen = ImageDataGenerator(featurewise_center=True, 
-                                featurewise_std_normalization=True, 
-                                data_format='channels_last', 
+        datagen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255, 
                                 rotation_range=40, 
                                 width_shift_range=0.2, 
                                 height_shift_range=0.2)
-        datagen.fit(train_x)
-        
-        evalgen = ImageDataGenerator(featurewise_center=True, 
-                                featurewise_std_normalization=True, 
-                                data_format='channels_last', 
+       
+        evalgen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255)
-        evalgen.fit(train_x)
         
         model.compile(loss='categorical_crossentropy', optimizer=self.src_optimizer, metrics=['accuracy'])
         
         if not os.path.isdir('data'):
             os.mkdir('data')
         
-        saver = keras.callbacks.ModelCheckpoint('data/mnist_encoder_{epoch:02d}.hdf5', 
+        saver = keras.callbacks.ModelCheckpoint('data/svhn_encoder_{epoch:02d}.hdf5', 
                                         monitor='val_loss', 
                                         verbose=1, 
                                         save_best_only=False, 
@@ -164,37 +163,31 @@ class ADDA():
                             validation_data=evalgen.flow(test_x, test_y, batch_size=batch_size), 
                             initial_epoch=start_epoch)
         
-    def train_target_discriminator(self, source_model=None, src_discriminator=None, tgt_discriminator=None, epochs=2000, batch_size=128, save_interval=1, start_epoch=0, num_batches=500):   
+    def train_target_discriminator(self, source_model=None, src_discriminator=None, tgt_discriminator=None, epochs=2000, batch_size=100, save_interval=1, start_epoch=0, num_batches=100):   
     
-        (source_x, _), (_,_) = get_dataset('mnist')
+        (source_x, _), (_,_) = get_dataset('svhn')
         
-        src_datagen = ImageDataGenerator(featurewise_center=True, 
-                                featurewise_std_normalization=True, 
-                                data_format='channels_last', 
+        src_datagen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255, 
                                 rotation_range=40, 
                                 width_shift_range=0.2, 
                                 height_shift_range=0.2)
-        src_datagen.fit(source_x)
         
-        (target_x, _), (_,_) = get_dataset('svhn')
+        (target_x, _), (_,_) = get_dataset('mnist')
         
-        tgt_datagen = ImageDataGenerator(featurewise_center=True, 
-                                featurewise_std_normalization=True, 
-                                data_format='channels_last', 
+        tgt_datagen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255, 
                                 rotation_range=40, 
                                 width_shift_range=0.2, 
                                 height_shift_range=0.2)
-        tgt_datagen.fit(target_x)
         
         self.define_source_encoder(source_model)
                 
         for layer in self.source_encoder.layers:
             layer.trainable = False
         
-        source_discriminator = self.get_discriminator(adda.source_encoder, src_discriminator)
-        target_discriminator = self.get_discriminator(adda.target_encoder, tgt_discriminator)
+        source_discriminator = self.get_discriminator(self.source_encoder, src_discriminator)
+        target_discriminator = self.get_discriminator(self.target_encoder, tgt_discriminator)
         
         if src_discriminator is not None:
             source_discriminator.load_weights(src_discriminator)
@@ -214,29 +207,30 @@ class ADDA():
         for iteration in range(start_epoch, epochs):
             
             avg_loss, avg_acc, index = [0, 0], [0, 0], 0
-            if iteration%self.discriminator_decay_rate==0:
-                lr = K.get_value(source_discriminator.optimizer.lr)
-                K.set_value(source_discriminator.optimizer.lr, lr*self.discriminator_decay_factor)
-                lr = K.get_value(target_discriminator.optimizer.lr)
-                K.set_value(target_discriminator.optimizer.lr, lr*self.discriminator_decay_factor)
-                print ('Learning Rate Decayed to: ', K.get_value(target_discriminator.optimizer.lr))
         
             for mnist,svhn in zip(src_datagen.flow(source_x, None, batch_size=batch_size), tgt_datagen.flow(target_x, None, batch_size=batch_size)):
                 l1, acc1 = source_discriminator.train_on_batch(mnist, np_utils.to_categorical(np.zeros(mnist.shape[0]), 2))
                 l2, acc2 = target_discriminator.train_on_batch(svhn, np_utils.to_categorical(np.ones(svhn.shape[0]), 2))
                 index+=1
                 loss, acc = (l1+l2)/2, (acc1+acc2)/2
-                print (iteration+1,': ', index,'/', num_batches, '; Loss: ', loss, '; Accuracy: ', acc)
+                print (iteration+1,': ', index,'/', num_batches, '; Loss: %.4f'%loss, ' (', '%.4f'%l1, '%.4f'%l2, '); Accuracy: ', acc, ' (', '%.4f'%acc1, '%.4f'%acc2, ')')
                 avg_loss[0] += l1
                 avg_acc[0] += acc1
                 avg_loss[1] += l2
                 avg_acc[1] += acc2
                 if index%num_batches == 0:
                     break
-                
+            
+            if iteration%self.discriminator_decay_rate==0:
+                lr = K.get_value(source_discriminator.optimizer.lr)
+                K.set_value(source_discriminator.optimizer.lr, lr*self.discriminator_decay_factor)
+                lr = K.get_value(target_discriminator.optimizer.lr)
+                K.set_value(target_discriminator.optimizer.lr, lr*self.discriminator_decay_factor)
+                print ('Learning Rate Decayed to: ', K.get_value(target_discriminator.optimizer.lr))
+            
             if iteration%save_interval==0:
-                source_discriminator.save_weights('data/discriminator_mnist_%2d.hdf5'%iteration)
-                target_discriminator.save_weights('data/discriminator_svhn_%2d.hdf5'%iteration)
+                source_discriminator.save_weights('data/discriminator_mnist_%02d.hdf5'%iteration)
+                target_discriminator.save_weights('data/discriminator_svhn_%02d.hdf5'%iteration)
                 
             self.tensorboard_log(callback1, src_names, [avg_loss[0]/mnist.shape[0], avg_acc[0]/mnist.shape[0]], iteration)
             self.tensorboard_log(callback2, tgt_names, [avg_loss[1]/mnist.shape[0], avg_acc[1]/mnist.shape[0]], iteration)
@@ -244,12 +238,9 @@ class ADDA():
     def eval_source_classifier(self, model, dataset='mnist', batch_size=128, domain='Source'):
         
         (train_x,_), (test_x, test_y) = get_dataset(dataset)
-        src_datagen = ImageDataGenerator(featurewise_center=True, 
-                                featurewise_std_normalization=True, 
-                                data_format='channels_last', 
-                                rescale=1./255)
-        src_datagen.fit(train_x)
-                        
+        src_datagen = ImageDataGenerator(data_format='channels_last', 
+                                        rescale=1./255)
+                      
         model.compile(loss='categorical_crossentropy', optimizer=self.src_optimizer, metrics=['accuracy'])
 
         scores = model.evaluate_generator(src_datagen.flow(test_x[:10000], test_y[:10000]),10000)
@@ -258,8 +249,8 @@ class ADDA():
             
     def eval_target_classifier(self, source_model, target_discriminator, dataset='svhn'):
         
-        enc = self.define_target_encoder()
-        model = self.get_source_classifier(enc, source_model)
+        self.define_target_encoder()
+        model = self.get_source_classifier(self.target_encoder, source_model)
         model.load_weights(target_discriminator, by_name=True)
         model.summary()
         self.eval_source_classifier(model, dataset=dataset, domain='Target')
@@ -270,6 +261,7 @@ if __name__ == '__main__':
     ap.add_argument('-s', '--source_weights', required=False, help="Path to weights file to load source model for training classification/adaptation")
     ap.add_argument('-e', '--start_epoch', type=int,default=1, required=False, help="Epoch to begin training source model from")
     ap.add_argument('-n', '--discriminator_epochs', type=int, default=10000, help="Max number of steps to train discriminator")
+    ap.add_argument('-l', '--lr', type=float, default=0.0001, help="Initial Learning Rate")
     ap.add_argument('-f', '--train_discriminator', action='store_true', help="Train discriminator model (if TRUE) vs Train source classifier")
     ap.add_argument('-a', '--source_discriminator_weights', help="Path to weights file to load source discriminator")
     ap.add_argument('-b', '--target_discriminator_weights', help="Path to weights file to load target discriminator")
@@ -277,7 +269,7 @@ if __name__ == '__main__':
     ap.add_argument('-d', '--eval_target_classifier', default=None, help="Path to target discriminator model to test/evaluate")
     args = ap.parse_args()
     
-    adda = ADDA()
+    adda = ADDA(args.lr)
     adda.define_source_encoder()
     
     if not args.train_discriminator:
@@ -286,15 +278,16 @@ if __name__ == '__main__':
             adda.train_source_model(model, start_epoch=args.start_epoch-1) 
         else:
             model = adda.get_source_classifier(adda.source_encoder, args.eval_source_classifier)
-            #adda.eval_source_classifier(model, 'mnist')
-            #adda.eval_source_classifier(model, 'svhn')
+            adda.eval_source_classifier(model, 'mnist')
+            adda.eval_source_classifier(model, 'svhn')
     adda.define_target_encoder(args.source_weights)
     
-    if args.train_discriminator and args.eval_target_classifier is None:
+    if args.train_discriminator:
         adda.train_target_discriminator(epochs=args.discriminator_epochs, 
                                         source_model=args.source_weights, 
                                         src_discriminator=args.source_discriminator_weights, 
-                                        tgt_discriminator=args.target_discriminator_weights)
-    else:
+                                        tgt_discriminator=args.target_discriminator_weights,
+                                        start_epoch=args.start_epoch-1)
+    if args.eval_target_classifier is not None:
         adda.eval_target_classifier(args.eval_source_classifier, args.eval_target_classifier)
     

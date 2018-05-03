@@ -15,8 +15,10 @@ def get_mnist():
    (train_x, train_y), (test_x, test_y) = mnist.load_data()
    train_x = np.pad(train_x,((0,0), (2,2), (2,2)),'constant')
    test_x = np.pad(test_x,((0,0), (2,2), (2,2)),'constant')
+   train_x = np.stack([train_x]*3, axis=3)
+   test_x = np.stack([test_x]*3, axis=3)
    
-   return (train_x.reshape(train_x.shape+(1,)), train_y), (test_x.reshape(test_x.shape+(1,)), test_y) 
+   return (train_x, train_y), (test_x, test_y) 
 
 def get_svhn():
     
@@ -44,6 +46,7 @@ def get_svhn():
     train_x = np.transpose(train['X'], (3,0,1,2))
     test_x = np.transpose(test['X'], (3,0,1,2)) 
     
+    '''
     Tx = np.zeros(train_x.shape[:-1])
     tx = np.zeros(test_x.shape[:-1])
     
@@ -53,7 +56,9 @@ def get_svhn():
     
     Tx = np.reshape(Tx, Tx.shape+(1,))
     tx = np.reshape(tx, tx.shape+(1,))
-    return (Tx, train_y), (tx, test_y) 
+    '''
+    
+    return (train_x, train_y), (test_x, test_y) 
 
 def get_dataset(dataset='mnist'):
     
