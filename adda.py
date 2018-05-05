@@ -28,7 +28,7 @@ class ADDA():
         # Input shape
         self.img_rows = 32
         self.img_cols = 32
-        self.channels = 3
+        self.channels = 1
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         self.src_flag = False
@@ -83,7 +83,7 @@ class ADDA():
         source_classifier_model = Model(inputs=(model.input), outputs=(x))
         
         if weights is not None:
-            source_classifier_model.load_weights(weights)
+            source_classifier_model.load_weights(weights, by_name=True)
         
         return source_classifier_model
     
@@ -125,10 +125,7 @@ class ADDA():
         (train_x, train_y), (test_x, test_y) = get_dataset('svhn')
         
         datagen = ImageDataGenerator(data_format='channels_last', 
-                                rescale=1./255, 
-                                rotation_range=40, 
-                                width_shift_range=0.2, 
-                                height_shift_range=0.2)
+                                rescale=1./255)
        
         evalgen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255)
@@ -197,6 +194,8 @@ class ADDA():
         source_discriminator.compile(loss = "binary_crossentropy", optimizer=self.tgt_optimizer, metrics=['accuracy'])
         target_discriminator.compile(loss = "binary_crossentropy", optimizer=self.tgt_optimizer, metrics=['accuracy'])
         
+        #target_classifier_model = self.get_source_classifier(self.
+        
         callback1 = keras.callbacks.TensorBoard('data/tensorboard')
         callback1.set_model(source_discriminator)
         callback2 = keras.callbacks.TensorBoard('data/tensorboard')
@@ -247,7 +246,7 @@ class ADDA():
         print('%s %s Classifier Test loss:%.5f'%(dataset.upper(), domain, scores[0]))
         print('%s %s Classifier Test accuracy:%.2f%%'%(dataset.upper(), domain, float(scores[1])*100))            
             
-    def eval_target_classifier(self, source_model, target_discriminator, dataset='svhn'):
+    def eval_target_classifier(self, source_model, target_discriminator, dataset='mnist'):
         
         self.define_target_encoder()
         model = self.get_source_classifier(self.target_encoder, source_model)
