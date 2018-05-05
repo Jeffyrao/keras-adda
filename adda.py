@@ -1,6 +1,5 @@
 from __future__ import print_function, division
 
-from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D, MaxPooling2D
 from keras.layers.advanced_activations import LeakyReLU
@@ -120,9 +119,9 @@ class ADDA():
         
         return disc
       
-    def train_source_model(self, model, epochs=2000, batch_size=128, save_interval=1, start_epoch=0):
+    def train_source_model(self, model, epochs=2000, batch_size=128, save_interval=1, start_epoch=0, dataset='mnist'):
 
-        (train_x, train_y), (test_x, test_y) = get_dataset('svhn')
+        (train_x, train_y), (test_x, test_y) = get_dataset(dataset)
         
         datagen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255)
@@ -135,7 +134,7 @@ class ADDA():
         if not os.path.isdir('data'):
             os.mkdir('data')
         
-        saver = keras.callbacks.ModelCheckpoint('data/svhn_encoder_{epoch:02d}.hdf5', 
+        saver = keras.callbacks.ModelCheckpoint('data/%s_encoder_{epoch:02d}.hdf5'%(dataset), 
                                         monitor='val_loss', 
                                         verbose=1, 
                                         save_best_only=False, 
@@ -160,9 +159,9 @@ class ADDA():
                             validation_data=evalgen.flow(test_x, test_y, batch_size=batch_size), 
                             initial_epoch=start_epoch)
         
-    def train_target_discriminator(self, source_model=None, src_discriminator=None, tgt_discriminator=None, epochs=2000, batch_size=100, save_interval=1, start_epoch=0, num_batches=100):   
+    def train_target_discriminator(self, source_model=None, src_discriminator=None, tgt_discriminator=None, epochs=2000, batch_size=100, save_interval=1, start_epoch=0, num_batches=100, src_dataset='mnist', tgt_dataset='usps'):   
     
-        (source_x, _), (_,_) = get_dataset('svhn')
+        (source_x, _), (_,_) = get_dataset(src_dataset)
         
         src_datagen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255, 
@@ -170,7 +169,7 @@ class ADDA():
                                 width_shift_range=0.2, 
                                 height_shift_range=0.2)
         
-        (target_x, _), (_,_) = get_dataset('mnist')
+        (target_x, _), (_,_) = get_dataset(tgt_dataset)
         
         tgt_datagen = ImageDataGenerator(data_format='channels_last', 
                                 rescale=1./255, 
@@ -207,9 +206,9 @@ class ADDA():
             
             avg_loss, avg_acc, index = [0, 0], [0, 0], 0
         
-            for mnist,svhn in zip(src_datagen.flow(source_x, None, batch_size=batch_size), tgt_datagen.flow(target_x, None, batch_size=batch_size)):
-                l1, acc1 = source_discriminator.train_on_batch(mnist, np_utils.to_categorical(np.zeros(mnist.shape[0]), 2))
-                l2, acc2 = target_discriminator.train_on_batch(svhn, np_utils.to_categorical(np.ones(svhn.shape[0]), 2))
+            for src_batch,tgt_batch in zip(src_datagen.flow(source_x, None, batch_size=batch_size), tgt_datagen.flow(target_x, None, batch_size=batch_size)):
+                l1, acc1 = source_discriminator.train_on_batch(src_batch, np_utils.to_categorical(np.zeros(src_batch.shape[0]), 2))
+                l2, acc2 = target_discriminator.train_on_batch(tgt_batch, np_utils.to_categorical(np.ones(tgt_batch.shape[0]), 2))
                 index+=1
                 loss, acc = (l1+l2)/2, (acc1+acc2)/2
                 print (iteration+1,': ', index,'/', num_batches, '; Loss: %.4f'%loss, ' (', '%.4f'%l1, '%.4f'%l2, '); Accuracy: ', acc, ' (', '%.4f'%acc1, '%.4f'%acc2, ')')
@@ -228,11 +227,11 @@ class ADDA():
                 print ('Learning Rate Decayed to: ', K.get_value(target_discriminator.optimizer.lr))
             
             if iteration%save_interval==0:
-                source_discriminator.save_weights('data/discriminator_mnist_%02d.hdf5'%iteration)
-                target_discriminator.save_weights('data/discriminator_svhn_%02d.hdf5'%iteration)
+                source_discriminator.save_weights('data/discriminator_%s_%02d.hdf5'%(src_dataset, iteration))
+                target_discriminator.save_weights('data/discriminator_%s_%02d.hdf5'%(tgt_dataset, iteration))
                 
-            self.tensorboard_log(callback1, src_names, [avg_loss[0]/mnist.shape[0], avg_acc[0]/mnist.shape[0]], iteration)
-            self.tensorboard_log(callback2, tgt_names, [avg_loss[1]/mnist.shape[0], avg_acc[1]/mnist.shape[0]], iteration)
+            self.tensorboard_log(callback1, src_names, [avg_loss[0]/src_batch.shape[0], avg_acc[0]/src_batch.shape[0]], iteration)
+            self.tensorboard_log(callback2, tgt_names, [avg_loss[1]/tgt_batch.shape[0], avg_acc[1]/tgt_batch.shape[0]], iteration)
     
     def eval_source_classifier(self, model, dataset='mnist', batch_size=128, domain='Source'):
         
@@ -274,11 +273,11 @@ if __name__ == '__main__':
     if not args.train_discriminator:
         if args.eval_source_classifier is None:
             model = adda.get_source_classifier(adda.source_encoder, args.source_weights)
-            adda.train_source_model(model, start_epoch=args.start_epoch-1) 
+            adda.train_source_model(model, start_epoch=args.start_epoch-1, dataset='mnist') 
         else:
             model = adda.get_source_classifier(adda.source_encoder, args.eval_source_classifier)
             adda.eval_source_classifier(model, 'mnist')
-            adda.eval_source_classifier(model, 'svhn')
+            adda.eval_source_classifier(model, 'usps')
     adda.define_target_encoder(args.source_weights)
     
     if args.train_discriminator:
@@ -286,7 +285,9 @@ if __name__ == '__main__':
                                         source_model=args.source_weights, 
                                         src_discriminator=args.source_discriminator_weights, 
                                         tgt_discriminator=args.target_discriminator_weights,
-                                        start_epoch=args.start_epoch-1)
+                                        start_epoch=args.start_epoch-1,
+                                        src_dataset='mnist',
+                                        tgt_dataset='usps')
     if args.eval_target_classifier is not None:
-        adda.eval_target_classifier(args.eval_source_classifier, args.eval_target_classifier)
+        adda.eval_target_classifier(args.eval_source_classifier, args.eval_target_classifier, dataset='usps')
     
